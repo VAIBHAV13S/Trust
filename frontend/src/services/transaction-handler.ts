@@ -1,7 +1,7 @@
 // Transaction Service
 // Handles signing and executing transactions on OneChain
-
-import type { SuiTransactionBlockResponse } from '@mysten/sui/client';
+ 
+import type { SuiTransactionBlockResponse } from '@onelabs/sui/client';
 import { oneChainClient, waitForTransaction, isTransactionSuccessful } from './onechain-client';
 import { ONE_CHAIN_CONFIG } from '@/config/onechain';
 

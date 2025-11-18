@@ -5,6 +5,8 @@ import Tournament, {
   TournamentRound,
 } from '../models/Tournament'
 import type { QueueParticipant } from './MatchmakingQueue'
+import { botStrategyService } from './BotStrategyService'
+import { resolveMatch, determineWinner } from './MatchResolutionService'
 
 export interface BracketSeed {
   address: string
@@ -262,6 +264,51 @@ export class TournamentManager {
 
     this.applyRoundRewards(tournament, roundNumber, match)
 
+    // Auto-resolve pure bot-vs-bot matches in this round so the bracket can advance
+    for (const m of round.matches) {
+      if (m.status === 'completed' || m.bye || !m.player1 || !m.player2) {
+        continue
+      }
+
+      const player1IsBot = botStrategyService.isBot(m.player1)
+      const player2IsBot = botStrategyService.isBot(m.player2)
+
+      if (!player1IsBot || !player2IsBot) {
+        continue
+      }
+
+      const choice1 = botStrategyService.decideMove(m.player1, m.player2, m.player2Reputation ?? 0)
+      const choice2 = botStrategyService.decideMove(m.player2, m.player1, m.player1Reputation ?? 0)
+
+      const outcome = resolveMatch(choice1, choice2)
+      const winnerSide = determineWinner(outcome.player1Tokens, outcome.player2Tokens)
+
+      const winnerAddr =
+        winnerSide === 'player1' ? m.player1 : winnerSide === 'player2' ? m.player2 : m.player1
+
+      m.winner = winnerAddr
+      m.status = 'completed'
+
+      const dbMatch = await Match.findOne({ matchId: m.matchId })
+      if (dbMatch) {
+        dbMatch.status = 'resolved'
+        dbMatch.winner = winnerSide
+        dbMatch.player1TokensEarned = outcome.player1Tokens
+        dbMatch.player2TokensEarned = outcome.player2Tokens
+        dbMatch.player1ReputationChange = outcome.player1RepChange
+        dbMatch.player2ReputationChange = outcome.player2RepChange
+        await dbMatch.save()
+      }
+
+      botStrategyService.recordChoice(m.player1, m.player2, choice1)
+      botStrategyService.recordOutcome(m.player1, winnerSide === 'player1')
+      botStrategyService.recordChoice(m.player2, m.player1, choice2)
+      botStrategyService.recordOutcome(m.player2, winnerSide === 'player2')
+      botStrategyService.adjustStrategyWeights()
+
+      this.applyRoundRewards(tournament, roundNumber, m)
+    }
+
     const advancingPlayers = round.matches
       .filter((m) => m.winner)
       .map((m) => ({
@@ -344,6 +391,94 @@ export class TournamentManager {
 
   private nextMatchNumber(tournament: ITournament) {
     return tournament.rounds.reduce((sum, round) => sum + round.matches.length, 0) + 1
+  }
+
+  async autoPlayBotOnlyRounds(tournamentId: string, startRoundNumber: number): Promise<ITournament> {
+    const tournament = await Tournament.findById(tournamentId)
+    if (!tournament) throw new Error('Tournament not found')
+
+    let currentRoundNumber = startRoundNumber
+
+    while (true) {
+      const round = tournament.rounds.find((r) => r.roundNumber === currentRoundNumber)
+      if (!round) {
+        break
+      }
+
+      const hasHuman = round.matches.some((m) => {
+        if (m.bye) return false
+        const p1 = m.player1
+        const p2 = m.player2
+        if (p1 && !botStrategyService.isBot(p1)) return true
+        if (p2 && !botStrategyService.isBot(p2)) return true
+        return false
+      })
+
+      if (hasHuman) {
+        break
+      }
+
+      for (const m of round.matches) {
+        if (m.bye || m.status === 'completed' || !m.player1 || !m.player2) {
+          continue
+        }
+
+        const choice1 = botStrategyService.decideMove(m.player1, m.player2, m.player2Reputation ?? 0)
+        const choice2 = botStrategyService.decideMove(m.player2, m.player1, m.player1Reputation ?? 0)
+
+        const outcome = resolveMatch(choice1, choice2)
+        const winnerSide = determineWinner(outcome.player1Tokens, outcome.player2Tokens)
+
+        const winnerAddr =
+          winnerSide === 'player1' ? m.player1 : winnerSide === 'player2' ? m.player2 : m.player1
+
+        m.winner = winnerAddr
+        m.status = 'completed'
+
+        botStrategyService.recordChoice(m.player1, m.player2, choice1)
+        botStrategyService.recordOutcome(m.player1, winnerSide === 'player1')
+        botStrategyService.recordChoice(m.player2, m.player1, choice2)
+        botStrategyService.recordOutcome(m.player2, winnerSide === 'player2')
+        botStrategyService.adjustStrategyWeights()
+
+        this.applyRoundRewards(tournament, currentRoundNumber, m)
+      }
+
+      const advancingPlayers = round.matches
+        .filter((m) => m.winner)
+        .map((m) => ({
+          address: m.winner!,
+          username: m.player1 === m.winner ? m.player1Username : m.player2Username || 'Winner',
+          reputation: m.player1 === m.winner ? m.player1Reputation : m.player2Reputation || 0,
+        }))
+
+      const roundCompleted = round.matches.every((m) => m.bye || m.status === 'completed')
+      if (!roundCompleted || advancingPlayers.length === 0) {
+        break
+      }
+
+      if (this.isFinalRound(tournament, currentRoundNumber)) {
+        this.finalizePayouts(tournament, round.matches)
+        tournament.currentRound = currentRoundNumber + 1
+        break
+      }
+
+      const nextRoundNumber = currentRoundNumber + 1
+      const { matches } = this.buildRound(
+        advancingPlayers,
+        this.nextMatchNumber(tournament),
+        currentRoundNumber
+      )
+
+      tournament.rounds.push({ roundNumber: nextRoundNumber, matches })
+      tournament.currentRound = nextRoundNumber
+      currentRoundNumber = nextRoundNumber
+    }
+
+    tournament.markModified('rounds')
+    tournament.markModified('metrics')
+    await tournament.save()
+    return tournament
   }
 
   async getTournament(tournamentId: string) {

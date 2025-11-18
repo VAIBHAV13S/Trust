@@ -1,5 +1,5 @@
 import { useCallback } from 'react'
-import { Transaction } from '@mysten/sui/transactions'
+import { Transaction } from '@onelabs/sui/transactions'
 import {
   createStakeTokensTx,
   createCommitChoiceTx,
@@ -22,15 +22,18 @@ const buildAndExecuteTx = async (tx: Transaction, description: string) => {
   try {
     // Sui/OneChain transactions require a sender address when building
     const sender = localStorage.getItem('walletAddress')
+    console.log('🔎 Using sender for tx:', sender)
+    const balance = await oneChainClient.getBalance({ owner: sender! })
+    console.log('🔎 On-chain gas balance (SUI/OCT) for sender:', balance)
     if (!sender) {
       throw new Error('Missing wallet address for transaction sender. Please reconnect your wallet.')
     }
 
     tx.setSender(sender)
 
-    const txBytes = await tx.build({ client: oneChainClient })
     const response = await provider.signAndExecuteTransactionBlock({
-      transactionBlock: txBytes,
+      // OneChain wallet expects a Transaction instance, not pre-built bytes
+      transactionBlock: tx,
       options: {
         showEffects: true,
         showEvents: true,

@@ -1,7 +1,7 @@
 // Game Contract Service
 // Wraps Move contract entry functions for the Trust Game
-
-import { Transaction } from '@mysten/sui/transactions';
+ 
+import { Transaction } from '@onelabs/sui/transactions';
 import { oneChainClient } from './onechain-client';
 import { ONE_CHAIN_CONFIG } from '@/config/onechain';
 

@@ -1,8 +1,8 @@
 // OneChain SDK Client
-// Initializes the @mysten/sui client for interacting with OneChain
+// Initializes the @onelabs/sui client for interacting with OneChain
 
-import { getFullnodeUrl, SuiClient } from '@mysten/sui/client';
-import type { SuiTransactionBlockResponse } from '@mysten/sui/client';
+import { getFullnodeUrl, SuiClient } from '@onelabs/sui/client';
+import type { SuiTransactionBlockResponse } from '@onelabs/sui/client';
 import { ONE_CHAIN_CONFIG } from '@/config/onechain';
 
 // Initialize Sui client for OneChain
