@@ -1,0 +1,25 @@
+{
+  "network": {
+    "name": "testnet",
+    "chainId": 4002,
+    "rpcUrl": "https://testnet-rpc.onelabs.cc"
+  },
+  "contracts": {
+    "GameManager": {
+      "address": "0x0000000000000000000000000000000000000000",
+      "abi": [
+        {
+          "inputs": [],
+          "name": "registerPlayer",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        }
+      ],
+      "deploymentBlock": 0,
+      "deploymentTx": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "deployer": "0x0000000000000000000000000000000000000000",
+      "timestamp": "2025-01-01T00:00:00.000Z"
+    }
+  }
+}

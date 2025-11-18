@@ -1,0 +1,16 @@
+[package]
+name = "game_manager"
+edition = "2024.beta"
+license = "MIT"
+authors = ["Trust Game Team"]
+
+[dependencies]
+One = { git = "https://github.com/one-chain-labs/onechain.git", subdir = "crates/sui-framework/packages/one-framework", rev = "main" }
+MoveStdlib = { git = "https://github.com/one-chain-labs/onechain.git", subdir = "crates/sui-framework/packages/move-stdlib", rev = "main" }
+
+[addresses]
+game_manager = "0x0"
+std = "0x1"
+one = "0x2"
+
+[dev-addresses]

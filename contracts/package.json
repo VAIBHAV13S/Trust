@@ -1,0 +1,22 @@
+{
+  "name": "trust-game-contracts",
+  "version": "1.0.0",
+  "description": "Trust Game Smart Contracts - Move/OneChain",
+  "scripts": {
+    "build": "bash -c '/home/phoeni/.cargo/bin/one move build --path game_manager'",
+    "test": "bash -c '/home/phoeni/.cargo/bin/one move test --path game_manager'",
+    "publish:testnet": "bash -c '/home/phoeni/.cargo/bin/one move publish --path game_manager --gas-budget 10000000'",
+    "publish:mainnet": "bash -c '/home/phoeni/.cargo/bin/one move publish --path game_manager --gas-budget 10000000'",
+    "lint": "bash -c '/home/phoeni/.cargo/bin/one move check --path game_manager'",
+    "clean": "bash -c '/home/phoeni/.cargo/bin/one move clean --path game_manager'"
+  },
+  "keywords": [
+    "onechain",
+    "move",
+    "smart-contracts",
+    "trust-game",
+    "prisoner-dilemma"
+  ],
+  "author": "Trust Game Team",
+  "license": "MIT"
+}

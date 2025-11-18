@@ -1,0 +1,21 @@
+{
+  "network": {
+    "name": "OneChain Testnet",
+    "chainId": 4002,
+    "rpc": "https://rpc-testnet.onelabs.cc:443",
+    "explorer": "https://testnet-explorer.onelabs.cc"
+  },
+  "deployment": {
+    "packageId": "0x3db2eaff3a4cff558fe73e6d2f10496fb56c8fe59b48527b620e35e5d55485bc",
+    "upgradeCapId": "0x75d8d0f5211f56e6b3025306da93097fc715d2cf950b48c4765465620148724b",
+    "transactionDigest": "Csn9U7ZmDUUnLiC7bypveTHYsFdkfneTPq5uxwgvorLy",
+    "publishedAt": "2025-11-16T15:40:00Z",
+    "deployer": "0xc15be5957a329fcd522024909f70b9f86bd76c2dbf630353db3c098bb2ccdb54",
+    "explorerUrl": "https://testnet-explorer.onelabs.cc/object/0x3db2eaff3a4cff558fe73e6d2f10496fb56c8fe59b48527b620e35e5d55485bc"
+  },
+  "objects": {
+    "gameStateId": "0xb3b2d06c609fc20a3d37eb8e7c2ed7ba14a825766bc3fe941d37a783ea845eb5",
+    "gameStateCapId": "0xac2e396dfc98fa2bd8e1b7c0aa97a7abc039adb9bcc9fecba08a2fb124ffb89a",
+    "notes": "GameState is shared; Cap retained by deployer for upgrades or admin actions."
+  }
+}
