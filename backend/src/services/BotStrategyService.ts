@@ -1,6 +1,6 @@
 import crypto from 'crypto'
-import type { QueueParticipant } from './MatchmakingQueue'
-import { BotStrategy } from '../types/participants'
+import type { QueueParticipant } from './MatchmakingQueue.js'
+import { BotStrategy } from '../types/participants.js'
 
 type BotMemory = {
   strategy: BotStrategy

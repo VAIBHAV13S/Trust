@@ -6,16 +6,16 @@ import { Server as SocketIOServer, Socket } from 'socket.io'
 import { createServer } from 'http'
 import mongoose from 'mongoose'
 
-import authRoutes from './routes/auth'
-import playersRoutes from './routes/players'
-import { createMatchesRoutes } from './routes/matches'
-import { createTournamentRoutes } from './routes/tournaments'
-import statsRoutes from './routes/stats'
-import { MatchmakingQueue } from './services/MatchmakingQueue'
-import { TournamentManager } from './services/TournamentManager'
-import { botStrategyService } from './services/BotStrategyService'
-import type { ITournament, TournamentMatch } from './models/Tournament'
-import { getActiveTournamentId, setActiveTournamentId } from './state/tournamentState'
+import authRoutes from './routes/auth.js'
+import playersRoutes from './routes/players.js'
+import { createMatchesRoutes } from './routes/matches.js'
+import { createTournamentRoutes } from './routes/tournaments.js'
+import statsRoutes from './routes/stats.js'
+import { MatchmakingQueue } from './services/MatchmakingQueue.js'
+import { TournamentManager } from './services/TournamentManager.js'
+import { botStrategyService } from './services/BotStrategyService.js'
+import type { ITournament, TournamentMatch, TournamentRound } from './models/Tournament.js'
+import { getActiveTournamentId, setActiveTournamentId } from './state/tournamentState.js'
 
 const app: Express = express()
 const httpServer = createServer(app)
@@ -302,7 +302,7 @@ async function startMatches() {
   setActiveTournamentId(tournamentId)
 
   const seededTournament = await tournamentManager.assignMatchIds(tournamentId, 1)
-  const firstRound = seededTournament.rounds.find((r) => r.roundNumber === 1)
+  const firstRound = seededTournament.rounds.find((r: TournamentRound) => r.roundNumber === 1)
 
   if (firstRound) {
     await broadcastRoundSeeded(seededTournament, 1, firstRound.matches)

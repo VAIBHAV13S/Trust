@@ -1,5 +1,5 @@
-import { BotStrategy } from '../types/participants'
-import { BotStrategyService } from './BotStrategyService'
+import { BotStrategy } from '../types/participants.js'
+import { BotStrategyService } from './BotStrategyService.js'
 
 export interface QueueParticipant {
   id: string

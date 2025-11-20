@@ -1,12 +1,17 @@
 import { Router, Request, Response } from 'express'
-import Match, { IMatch } from '../models/Match'
-import Player from '../models/Player'
-import { authMiddleware } from '../middleware/authMiddleware'
-import { Choice, resolveMatch, getChoiceDescription, determineWinner } from '../services/MatchResolutionService'
-import { TournamentManager } from '../services/TournamentManager'
-import type { ITournament, TournamentMatch } from '../models/Tournament'
-import { resolveMatchFromChainByMatchId } from '../services/OnChainMatchResolver'
-import { botStrategyService } from '../services/BotStrategyService'
+import Match, { IMatch } from '../models/Match.js'
+import Player from '../models/Player.js'
+import { authMiddleware } from '../middleware/authMiddleware.js'
+import {
+  Choice,
+  resolveMatch,
+  getChoiceDescription,
+  determineWinner,
+} from '../services/MatchResolutionService.js'
+import { TournamentManager } from '../services/TournamentManager.js'
+import type { ITournament, TournamentMatch } from '../models/Tournament.js'
+import { resolveMatchFromChainByMatchId } from '../services/OnChainMatchResolver.js'
+import { botStrategyService } from '../services/BotStrategyService.js'
 
 interface MatchesRouteDependencies {
   tournamentManager: TournamentManager

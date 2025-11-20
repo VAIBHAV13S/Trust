@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express'
-import Match from '../models/Match'
-import Player from '../models/Player'
+import Match from '../models/Match.js'
+import Player from '../models/Player.js'
 
 const router = Router()
 

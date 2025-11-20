@@ -1,7 +1,7 @@
-import Match from '../models/Match'
-import Player from '../models/Player'
-import { oneChainClient } from './onechain-client'
-import { determineWinner, getChoiceDescription } from './MatchResolutionService'
+import Match from '../models/Match.js'
+import Player from '../models/Player.js'
+import { oneChainClient } from './onechain-client.js'
+import { determineWinner, getChoiceDescription } from './MatchResolutionService.js'
 
 export async function resolveMatchFromChainByMatchId(matchId: string) {
   const match = await Match.findOne({ matchId })

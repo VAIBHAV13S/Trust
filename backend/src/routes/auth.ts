@@ -2,7 +2,7 @@ import express, { Request, Response } from 'express'
 import jwt from 'jsonwebtoken'
 import { TextEncoder } from 'util'
 import { verifyPersonalMessageSignature } from '@onelabs/sui/verify'
-import Player from '../models/Player'
+import Player from '../models/Player.js'
 
 const router = express.Router()
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this'

@@ -2,7 +2,7 @@ import crypto from 'crypto'
 import { blake2b } from '@noble/hashes/blake2.js'
 import { Transaction } from '@onelabs/sui/transactions'
 import { Ed25519Keypair } from '@onelabs/sui/keypairs/ed25519'
-import { oneChainClient } from './onechain-client'
+import { oneChainClient } from './onechain-client.js'
 
 const PKG_ID = process.env.GAME_CONTRACT_ADDRESS || '0x0'
 const MODULE = 'game_manager'

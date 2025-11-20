@@ -1,8 +1,8 @@
 import { Router, Request, Response } from 'express'
-import { TournamentManager } from '../services/TournamentManager'
-import type { ITournament, TournamentMatch } from '../models/Tournament'
-import { authMiddleware } from '../middleware/authMiddleware'
-import { getActiveTournamentId } from '../state/tournamentState'
+import { TournamentManager } from '../services/TournamentManager.js'
+import type { ITournament, TournamentMatch } from '../models/Tournament.js'
+import { authMiddleware } from '../middleware/authMiddleware.js'
+import { getActiveTournamentId } from '../state/tournamentState.js'
 
 interface TournamentRoutesDependencies {
   tournamentManager: TournamentManager

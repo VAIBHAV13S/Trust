@@ -1,12 +1,12 @@
-import Match from '../models/Match'
+import Match from '../models/Match.js'
 import Tournament, {
   ITournament,
   TournamentMatch,
   TournamentRound,
-} from '../models/Tournament'
-import type { QueueParticipant } from './MatchmakingQueue'
-import { botStrategyService } from './BotStrategyService'
-import { resolveMatch, determineWinner } from './MatchResolutionService'
+} from '../models/Tournament.js'
+import type { QueueParticipant } from './MatchmakingQueue.js'
+import { botStrategyService } from './BotStrategyService.js'
+import { resolveMatch, determineWinner } from './MatchResolutionService.js'
 
 export interface BracketSeed {
   address: string

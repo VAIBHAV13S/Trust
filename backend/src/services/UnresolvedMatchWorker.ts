@@ -1,5 +1,5 @@
-import Match from '../models/Match'
-import { resolveMatchFromChainByMatchId } from './OnChainMatchResolver'
+import Match from '../models/Match.js'
+import { resolveMatchFromChainByMatchId } from './OnChainMatchResolver.js'
 
 const ENABLE_MATCH_INDEXER = process.env.ENABLE_MATCH_INDEXER === 'true'
 const MATCH_INDEXER_INTERVAL_MS = Number(process.env.MATCH_INDEXER_INTERVAL_MS || 15000)

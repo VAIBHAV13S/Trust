@@ -1,7 +1,7 @@
-import Match from '../models/Match'
-import { botStrategyService } from './BotStrategyService'
-import type { TournamentMatch } from '../models/Tournament'
-import { BotChainService } from './BotChainService'
+import Match from '../models/Match.js'
+import { botStrategyService } from './BotStrategyService.js'
+import type { TournamentMatch } from '../models/Tournament.js'
+import { BotChainService } from './BotChainService.js'
 
 const BOT_AGENT_ENABLED = process.env.ENABLE_BOT_AGENT === 'true'
 

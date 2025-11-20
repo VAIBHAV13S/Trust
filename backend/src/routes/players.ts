@@ -1,6 +1,6 @@
 import express, { Request, Response } from 'express'
-import { authMiddleware } from './auth'
-import Player from '../models/Player'
+import { authMiddleware } from './auth.js'
+import Player from '../models/Player.js'
 
 const router = express.Router()
 
