@@ -2,10 +2,11 @@ import { Router, Request, Response } from 'express'
 import Match, { IMatch } from '../models/Match'
 import Player from '../models/Player'
 import { authMiddleware } from '../middleware/authMiddleware'
-import { getChoiceDescription } from '../services/MatchResolutionService'
+import { Choice, resolveMatch, getChoiceDescription, determineWinner } from '../services/MatchResolutionService'
 import { TournamentManager } from '../services/TournamentManager'
 import type { ITournament, TournamentMatch } from '../models/Tournament'
 import { resolveMatchFromChainByMatchId } from '../services/OnChainMatchResolver'
+import { botStrategyService } from '../services/BotStrategyService'
 
 interface MatchesRouteDependencies {
   tournamentManager: TournamentManager
@@ -20,6 +21,98 @@ interface MatchesRouteDependencies {
 export function createMatchesRoutes(deps: MatchesRouteDependencies) {
   const router = Router()
   const { tournamentManager, onTournamentUpdated, onRoundSeeded } = deps
+
+  // Off-chain resolution for matches involving bots (bot vs bot or bot vs human).
+  // This ensures tournaments can always advance even when there is no on-chain
+  // match object or the opponent has no wallet to sign transactions.
+  const resolveMatchOffChain = async (existingMatch: IMatch): Promise<IMatch> => {
+    const match = await Match.findOne({ matchId: existingMatch.matchId })
+    if (!match) {
+      throw new Error('Match not found')
+    }
+
+    if (match.status === 'resolved') {
+      return match
+    }
+
+    const isPlayer1Bot = botStrategyService.isBot(match.player1Address)
+    const isPlayer2Bot = botStrategyService.isBot(match.player2Address)
+
+    // Determine choices: bots use their strategy; humans default to ABSTAIN
+    const player1Choice: Choice = isPlayer1Bot
+      ? (botStrategyService.decideMove(
+          match.player1Address,
+          match.player2Address,
+          match.player2Reputation
+        ) as Choice)
+      : Choice.ABSTAIN
+
+    const player2Choice: Choice = isPlayer2Bot
+      ? (botStrategyService.decideMove(
+          match.player2Address,
+          match.player1Address,
+          match.player1Reputation
+        ) as Choice)
+      : Choice.ABSTAIN
+
+    const outcome = resolveMatch(player1Choice, player2Choice)
+    const winnerSide = determineWinner(outcome.player1Tokens, outcome.player2Tokens)
+
+    match.player1Choice = player1Choice
+    match.player2Choice = player2Choice
+    match.player1TokensEarned = outcome.player1Tokens
+    match.player2TokensEarned = outcome.player2Tokens
+    match.player1ReputationChange = outcome.player1RepChange
+    match.player2ReputationChange = outcome.player2RepChange
+    match.winner = winnerSide
+    match.status = 'resolved'
+    match.resolvedAt = new Date()
+    match.description = 'Resolved off-chain (bot simulation)'
+
+    await match.save()
+
+    const playerUpdates: Promise<any>[] = []
+
+    if (!isPlayer1Bot) {
+      playerUpdates.push(
+        Player.findOneAndUpdate(
+          { walletAddress: match.player1Address },
+          {
+            $inc: {
+              tokensAvailable: outcome.player1Tokens,
+              reputation: outcome.player1RepChange,
+              matchesPlayed: 1,
+              matchesWon: winnerSide === 'player1' ? 1 : 0,
+            },
+          },
+          { new: true }
+        )
+      )
+    }
+
+    if (!isPlayer2Bot) {
+      playerUpdates.push(
+        Player.findOneAndUpdate(
+          { walletAddress: match.player2Address },
+          {
+            $inc: {
+              tokensAvailable: outcome.player2Tokens,
+              reputation: outcome.player2RepChange,
+              matchesPlayed: 1,
+              matchesWon: winnerSide === 'player2' ? 1 : 0,
+            },
+          },
+          { new: true }
+        )
+      )
+    }
+
+    if (playerUpdates.length > 0) {
+      await Promise.all(playerUpdates)
+    }
+
+    return match
+  }
 
   /**
    * POST /api/matches - Create a new match
@@ -136,34 +229,54 @@ export function createMatchesRoutes(deps: MatchesRouteDependencies) {
   })
 
   /**
-   * POST /api/matches/:matchId/resolve - Resolve match from on-chain state
+   * POST /api/matches/:matchId/resolve - Resolve match
+   *
+   * For pure human-vs-human matches that use the Move contract, this endpoint
+   * resolves from on-chain state. For any match that involves a bot
+   * (bot-vs-bot or bot-vs-human), it falls back to off-chain resolution using
+   * BotStrategyService + MatchResolutionService so tournaments can always
+   * advance.
    */
   router.post('/:matchId/resolve', authMiddleware, async (req: Request, res: Response) => {
     let matchDoc: IMatch | null = null
 
     try {
       const { matchId } = req.params
+      const existing = await Match.findOne({ matchId })
+      if (!existing) {
+        return res.status(404).json({ error: 'Match not found' })
+      }
 
-      const match = await resolveMatchFromChainByMatchId(matchId)
-      matchDoc = match
+      const isPlayer1Bot = botStrategyService.isBot(existing.player1Address)
+      const isPlayer2Bot = botStrategyService.isBot(existing.player2Address)
 
-      const onChainPlayer1Choice = typeof match.player1Choice === 'number' ? match.player1Choice : 2
-      const onChainPlayer2Choice = typeof match.player2Choice === 'number' ? match.player2Choice : 2
+      if (isPlayer1Bot || isPlayer2Bot) {
+        // Off-chain path for any match that includes a bot participant
+        const resolved = await resolveMatchOffChain(existing)
+        matchDoc = resolved
+      } else {
+        // Pure human-vs-human: require on-chain resolution
+        const resolved = await resolveMatchFromChainByMatchId(matchId)
+        matchDoc = resolved
+      }
+
+      const p1Choice = typeof matchDoc.player1Choice === 'number' ? matchDoc.player1Choice : 2
+      const p2Choice = typeof matchDoc.player2Choice === 'number' ? matchDoc.player2Choice : 2
 
       res.json({
-        matchId: match.matchId,
+        matchId: matchDoc.matchId,
         player1: {
-          choice: getChoiceDescription(onChainPlayer1Choice),
-          tokensEarned: match.player1TokensEarned,
-          reputationChange: match.player1ReputationChange,
+          choice: getChoiceDescription(p1Choice as Choice),
+          tokensEarned: matchDoc.player1TokensEarned,
+          reputationChange: matchDoc.player1ReputationChange,
         },
         player2: {
-          choice: getChoiceDescription(onChainPlayer2Choice),
-          tokensEarned: match.player2TokensEarned,
-          reputationChange: match.player2ReputationChange,
+          choice: getChoiceDescription(p2Choice as Choice),
+          tokensEarned: matchDoc.player2TokensEarned,
+          reputationChange: matchDoc.player2ReputationChange,
         },
-        winner: match.winner,
-        description: match.description,
+        winner: matchDoc.winner,
+        description: matchDoc.description,
       })
     } catch (error: any) {
       console.error('Error resolving match:', error)
