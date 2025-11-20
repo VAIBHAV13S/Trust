@@ -7,6 +7,7 @@ import { ResultAnimation } from '../components/ResultAnimation'
 import apiClient from '../utils/api'
 import { useBlockchainActions } from '@/hooks/useBlockchainActions'
 import { useOnChainData } from '@/hooks/useOnChainData'
+import { generateSalt, computeCommitment, bytesToHex } from '@/utils/gameCrypto'
 
 type Choice = 'COOPERATE' | 'BETRAY' | 'ABSTAIN' | null
 
@@ -42,11 +43,12 @@ export const Match: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [stakeAmount, setStakeAmount] = useState('1')
   const [choiceHash, setChoiceHash] = useState('')
-  const [revealSalt, setRevealSalt] = useState('0')
+  const [revealSalt, setRevealSalt] = useState('')
   const [localResult, setLocalResult] = useState<MatchResult | null>(null)
   const [hasStakedOnChain, setHasStakedOnChain] = useState(false)
   const [onChainMatchId, setOnChainMatchId] = useState<string | null>(null)
   const [onChainAvailable, setOnChainAvailable] = useState(true)
+  const [commitSalt, setCommitSalt] = useState<Uint8Array | null>(null)
 
   const choiceToCode = (choice: Choice): 0 | 1 | 2 => {
     switch (choice) {
@@ -115,6 +117,9 @@ export const Match: React.FC = () => {
     setHasStakedOnChain(false)
     setOnChainMatchId(null)
     setOnChainAvailable(true)
+    setChoiceHash('')
+    setRevealSalt('')
+    setCommitSalt(null)
   }, [matchId])
 
   // Ensure there is an on-chain Match object id we can use for staking/commit/reveal
@@ -173,14 +178,25 @@ export const Match: React.FC = () => {
   }
 
   const handleCommitOnChain = async () => {
-    if (!matchId || !choiceHash) {
-      setError('Provide a commitment hash before committing on-chain')
+    if (!matchId) return
+    if (selectedChoice === null) {
+      setError('Select a choice before committing on-chain')
       return
     }
     try {
       const onChainId = await ensureOnChainMatchId()
       if (!onChainId) return
-      await commitChoice(onChainId, choiceHash)
+      const salt = generateSalt()
+      const choiceCode = choiceToCode(selectedChoice)
+      const hashBytes = computeCommitment(choiceCode, salt)
+      const hashHex = `0x${bytesToHex(hashBytes)}`
+
+      setChoiceHash(hashHex)
+      setRevealSalt(bytesToHex(salt))
+      setCommitSalt(salt)
+
+      await commitChoice(onChainId, hashHex)
+      setError(null)
     } catch (err) {
       console.error('Commit failed:', err)
       setError('Failed to commit choice on-chain')
@@ -192,13 +208,17 @@ export const Match: React.FC = () => {
       setError('Select a choice before revealing on-chain')
       return
     }
+    if (!commitSalt) {
+      setError('You must commit your choice on-chain before revealing.')
+      return
+    }
     try {
       const onChainId = await ensureOnChainMatchId()
       if (!onChainId) return
       await revealChoice(
         onChainId,
         selectedChoice === 'COOPERATE' ? 0 : selectedChoice === 'BETRAY' ? 1 : 2,
-        BigInt(revealSalt)
+        commitSalt
       )
     } catch (err) {
       console.error('Reveal failed:', err)
@@ -239,7 +259,7 @@ export const Match: React.FC = () => {
     return () => clearInterval(timer)
   }, [isSubmitted, matchData, hasStakedOnChain, onChainAvailable])
 
-  const handleSubmitChoice = async (choice: Choice) => {
+  const handleSubmitChoice = (choice: Choice) => {
     if (!choice || !matchId) return
 
     if (onChainAvailable && !hasStakedOnChain) {
@@ -247,24 +267,28 @@ export const Match: React.FC = () => {
       return
     }
 
+    // Track local choice while waiting for on-chain resolution
+    setSelectedChoice(choice)
+    setIsSubmitted(true)
+  }
+
+  const handleResolveFromChain = async () => {
+    if (!matchId) return
+
     setIsSubmitting(true)
     setError(null)
 
     try {
-      const choiceCode = choiceToCode(choice)
-      const payload: { player1Choice?: number; player2Choice?: number } = {}
-      if (isYouPlayer1) {
-        payload.player1Choice = choiceCode
-      } else {
-        payload.player2Choice = choiceCode
-      }
-
-      const response = await apiClient.post(`/matches/${matchId}/resolve`, payload)
-
+      const response = await apiClient.post(`/matches/${matchId}/resolve`)
       setLocalResult(response.data as MatchResult)
-      setIsSubmitted(true)
-    } catch (err) {
-      setError('Failed to submit choice')
+    } catch (err: any) {
+      const backendError = err?.response?.data?.error
+      if (backendError) {
+        setError(backendError)
+      } else {
+        setError('Failed to resolve match from on-chain state')
+      }
+    } finally {
       setIsSubmitting(false)
     }
   }
@@ -485,6 +509,16 @@ export const Match: React.FC = () => {
           </p>
         </div>
 
+        <div className="mt-4 flex justify-center">
+          <button
+            onClick={handleResolveFromChain}
+            disabled={isSubmitting || !matchId}
+            className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50"
+          >
+            {isSubmitting ? 'Resolving from chain...' : 'Sync Result From Chain'}
+          </button>
+        </div>
+
         {/* On-chain summary */}
         <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-slate-900/60 border border-slate-700 rounded-xl p-4">
@@ -534,9 +568,9 @@ export const Match: React.FC = () => {
               <input
                 type="text"
                 value={choiceHash}
-                onChange={(e) => setChoiceHash(e.target.value)}
                 className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 font-mono"
-                placeholder="0x..."
+                placeholder="Auto-computed when you commit"
+                readOnly
               />
               <button
                 onClick={handleCommitOnChain}
@@ -552,10 +586,11 @@ export const Match: React.FC = () => {
             <div>
               <label className="block text-sm text-slate-400 mb-2">Reveal Salt</label>
               <input
-                type="number"
+                type="text"
                 value={revealSalt}
-                onChange={(e) => setRevealSalt(e.target.value)}
                 className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2"
+                placeholder="Auto-generated when you commit"
+                readOnly
               />
               <button
                 onClick={handleRevealOnChain}

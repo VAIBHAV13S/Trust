@@ -6,6 +6,7 @@ export const ONE_CHAIN_CONFIG = {
   packageId: import.meta.env.VITE_ONECHAIN_PACKAGE_ID || '0x0',
   module: 'game_manager',
   gameStateId: import.meta.env.VITE_ONECHAIN_GAME_STATE_ID || '0x6',
+  matchmakingQueueId: import.meta.env.VITE_ONECHAIN_QUEUE_ID || null,
   
   // Network Configuration
   rpc: import.meta.env.VITE_ONECHAIN_RPC || 'https://rpc-testnet.onelabs.cc:443',

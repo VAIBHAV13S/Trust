@@ -63,22 +63,21 @@ Notes:
     matchmaking.enterQueue(stakeAmount)
     ```
 
-    * This call **escrows stake** in contract for that player.
+    * This call **escrows stake** in contract for that player and records on-chain participation.
+  * In parallel, the player also joins the backend lobby (Socket.io) which is used to orchestrate brackets.
   * UI transitions to “Matching players… (n/50)”.
 * **Queue, Fill & Tournament Creation**
 
   * Queue target: **50 players**.
   * Queue fill behavior:
 
-    * Real players join via `enterQueue`.
-    * If queue length < 50 after `QUEUE_FILL_TIMEOUT` (e.g., 10s), contract **auto-fills remaining slots with bots**.
-
-      * Bots are represented on-chain by a `isBot` flag and pseudo-addresses, or real bot wallets controlled by backend (implementation choice — see Contracts section).
-    * When `queue.length == 50`, contract auto-calls `createTournament(players[])` and emits `TournamentCreated(tid, players[])`.
+    * Real players join via `enterQueue` on-chain **and** via the backend lobby, which maintains the authoritative queue for brackets.
+    * When enough players are present or a countdown completes, the **backend** fills remaining slots with bots (using `MatchmakingQueue` + `TournamentManager`) and seeds the tournament bracket in MongoDB.
+    * The on-chain `matchmaking` / `tournament` modules can emit `PlayerEnteredQueue` / `TournamentCreated` / `MatchCreated` events for indexing, but for the MVP the bracket structure (who plays whom in each round) is defined by the backend.
 * **Frontend event handling**
 
-  * Listen for `TournamentCreated` and `MatchCreated` events.
-  * If current user is in the players array, navigate to `/tournament/:tid` and show tournament UI.
+  * Listen for backend socket events (`tournament-updated`, `tournament-round-seeded`, `match-started`). These can be produced by a backend indexer that also consumes on-chain events.
+  * If current user is in the seeded matches, navigate to `/tournament/:tid` or `/match/:matchId` and show the appropriate UI.
   * Show real-time count: “Matching players… (7/50). Filling empty slots with bots in Xs.”
 
 ---
@@ -144,9 +143,9 @@ Important:
   * Option B: mapping each bot to a distinct pre-funded bot wallet recorded on-chain (more transparent but requires more wallets).
 * **Bot actions**
 
-  * Bot agent listens for `TournamentCreated` & `MatchCreated`, and:
+  * Bot agent listens to **backend tournament/match events** (e.g., seeded matches in MongoDB or Socket.io `match-started`), and:
 
-    * Stakes (if required), commits and reveals using bot wallets.
+    * Stakes (if required), commits and reveals using bot wallets **on-chain**.
     * Uses simple probabilistic AI (e.g., 70% cooperate vs humans, random vs bots).
 * **On-chain visibility**
 
@@ -159,12 +158,11 @@ Important:
 
 # 6. On-chain contract responsibilities (summary)
 
-* `Matchmaking.enterQueue(stakeAmount)` — escrow stake and append player.
-* `Matchmaking.autoFillBots()` — after timeout, fill to 50 and call `createTournament`.
-* `Tournament.createTournament(players[])` — create tournament record and generate first round matches.
-* `Match.createMatch(p1,p2,stake,deadlines)` — handle commit/reveal, compute settlement.
-* `Match.commitChoice`, `Match.revealChoice`, `Match.withdrawWinnings` — all required on-chain.
-* Events to emit: `PlayerEnteredQueue`, `TournamentCreated`, `MatchCreated`, `PlayerCommitted`, `PlayerRevealed`, `MatchSettled`, `WinningsWithdrawn`.
+* `Matchmaking.enterQueue(stakeAmount)` — escrow stake and append player to an on-chain queue for transparency and analytics.
+* `Matchmaking.autoFillBots()` / `Tournament.*` — available for a future **fully on-chain** bracket; in the current MVP, brackets and bot fill are orchestrated by the backend `MatchmakingQueue` + `TournamentManager`.
+* `Match.createMatch(p1,p2,stake,deadlines)` — handle commit/reveal, compute settlement for a single match (authoritative game outcome).
+* `Match.commitChoice`, `Match.revealChoice`, `Match.withdrawWinnings` — all required on-chain (no off-chain commit/reveal or settlement).
+* Events to emit: `PlayerEnteredQueue`, `TournamentCreated`, `MatchCreated`, `PlayerCommitted`, `PlayerRevealed`, `MatchSettled`, `WinningsWithdrawn` — used by the backend indexer for history, leaderboards, and optional tournament visualizations.
 
 Security & gas:
 
@@ -247,13 +245,15 @@ Security & gas:
 
 # 10. Minimal backend responsibilities (REVISED)
 
-* Provide non-authoritative features only:
+* Provide:
 
-  * Username mapping (address → display name)
-  * Indexed history & leaderboards from chain events
-  * Bot agent to operate bot wallets (stake/commit/reveal)
-  * Analytics, monitoring, and alerting
-* **Do not** perform match settlement, commit/reveal verification, or any authoritative game logic.
+  * Username mapping (address → display name).
+  * **Tournament & bracket orchestration** (lobby management, seeding rounds, pairing players and bots) via `MatchmakingQueue` + `TournamentManager`.
+  * Indexed history & leaderboards, using on-chain match outcomes (rewards/choices) mirrored into MongoDB.
+  * Bot agent to operate bot wallets (stake/commit/reveal/withdraw) for matches the backend identifies as bot-involved.
+  * Analytics, monitoring, and alerting.
 
+* **Do not** perform match settlement or commit/reveal verification logic:
 
-
+  * The payoff matrix, reputation deltas, and win/loss/tie determination are defined and enforced in the Move `game_manager` module.
+  * Backend reads on-chain `Match` objects or events and mirrors results; it never overrides on-chain outcomes.

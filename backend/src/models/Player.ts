@@ -34,8 +34,7 @@ const playerSchema = new Schema<IPlayer>(
 )
 
 // Indexes
-playerSchema.index({ walletAddress: 1 })
-playerSchema.index({ username: 1 })
+
 playerSchema.index({ reputation: -1 })
 playerSchema.index({ createdAt: -1 })
 

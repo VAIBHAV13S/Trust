@@ -108,7 +108,7 @@ export const createCommitChoiceTx = (
 export const createRevealChoiceTx = (
   matchId: string,
   choice: 0 | 1 | 2,
-  salt: bigint
+  saltBytes: number[]
 ): Transaction => {
   const tx = new Transaction();
   
@@ -117,7 +117,7 @@ export const createRevealChoiceTx = (
     arguments: [
       tx.object(matchId),
       tx.pure.u8(choice),
-      tx.pure.u64(salt),
+      tx.pure.vector('u8', saltBytes),
     ],
   });
   

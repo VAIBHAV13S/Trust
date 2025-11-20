@@ -59,7 +59,8 @@ export class TournamentManager {
     const rounds = this.buildInitialRounds(seeds)
 
     const tournament = new Tournament({
-      status: 'pending',
+      // As soon as we build a bracket from the queue, this tournament is active
+      status: 'in_progress',
       currentRound: 1,
       rounds,
       metrics: {
@@ -364,6 +365,9 @@ export class TournamentManager {
       tournament.metrics.reputationBonuses[runnerUp] =
         (tournament.metrics.reputationBonuses[runnerUp] || 0) + 25
     }
+
+    // Mark tournament as completed so downstream listeners (e.g. lobby) can reopen
+    tournament.status = 'completed'
   }
 
   private getRoundMultiplier(roundNumber: number) {

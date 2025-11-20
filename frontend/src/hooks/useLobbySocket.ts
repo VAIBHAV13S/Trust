@@ -13,10 +13,11 @@ import {
 } from '../store/lobbySlice'
 import { RootState } from '../store'
 
-// Get API URL from environment or default
-const getApiUrl = () => {
+// Get Socket URL from environment or default (strip /api when using VITE_API_URL)
+const getSocketUrl = () => {
   try {
-    return (import.meta as any).env.VITE_API_URL || 'http://localhost:3000'
+    const raw = (import.meta as any).env.VITE_API_URL || 'http://localhost:3000/api'
+    return raw.replace(/\/api\/?$/, '')
   } catch {
     return 'http://localhost:3000'
   }
@@ -32,7 +33,7 @@ export const useLobbySocket = () => {
     if (!auth.isConnected || !auth.player) return
 
     // Initialize Socket.io connection
-    const socket = io(getApiUrl(), {
+    const socket = io(getSocketUrl(), {
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,

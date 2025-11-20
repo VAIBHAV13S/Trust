@@ -12,6 +12,7 @@
     "format": "prettier --write \"src/**/*.ts\""
   },
   "dependencies": {
+    "@noble/hashes": "^2.0.1",
     "@onelabs/sui": "^1.26.2",
     "bcryptjs": "^2.4.3",
     "bull": "^4.11.4",

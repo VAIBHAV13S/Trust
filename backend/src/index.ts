@@ -327,8 +327,14 @@ function notifyMatchParticipants(match: TournamentMatch, round: number) {
   })
 
   const opponentForPlayer1: string | undefined = match.player2 ?? undefined
-  notifyPlayer(match.player1, opponentForPlayer1, match.matchId, round)
-  if (match.player2) {
+
+  // Only notify non-bot participants; bots do not maintain sockets and
+  // attempting to emit to them just creates noisy 'No socket found' logs.
+  if (!botStrategyService.isBot(match.player1)) {
+    notifyPlayer(match.player1, opponentForPlayer1, match.matchId, round)
+  }
+
+  if (match.player2 && !botStrategyService.isBot(match.player2)) {
     notifyPlayer(match.player2, match.player1, match.matchId, round)
   }
 }

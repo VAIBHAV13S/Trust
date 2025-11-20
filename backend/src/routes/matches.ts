@@ -2,14 +2,10 @@ import { Router, Request, Response } from 'express'
 import Match, { IMatch } from '../models/Match'
 import Player from '../models/Player'
 import { authMiddleware } from '../middleware/authMiddleware'
-import {
-  resolveMatch,
-  getChoiceDescription,
-  determineWinner,
-} from '../services/MatchResolutionService'
+import { getChoiceDescription } from '../services/MatchResolutionService'
 import { TournamentManager } from '../services/TournamentManager'
 import type { ITournament, TournamentMatch } from '../models/Tournament'
-import { botStrategyService, BotStrategyService } from '../services/BotStrategyService'
+import { resolveMatchFromChainByMatchId } from '../services/OnChainMatchResolver'
 
 interface MatchesRouteDependencies {
   tournamentManager: TournamentManager
@@ -140,133 +136,56 @@ export function createMatchesRoutes(deps: MatchesRouteDependencies) {
   })
 
   /**
-   * POST /api/matches/:matchId/resolve - Resolve match with both choices
-   * Body: { player1Choice: 0|1|2, player2Choice: 0|1|2 }
+   * POST /api/matches/:matchId/resolve - Resolve match from on-chain state
    */
   router.post('/:matchId/resolve', authMiddleware, async (req: Request, res: Response) => {
     let matchDoc: IMatch | null = null
 
     try {
       const { matchId } = req.params
-      let { player1Choice, player2Choice } = req.body
 
-      // Coerce string inputs like "0" | "1" | "2" into numbers
-      if (typeof player1Choice === 'string') {
-        player1Choice = parseInt(player1Choice, 10)
-      }
-      if (typeof player2Choice === 'string') {
-        player2Choice = parseInt(player2Choice, 10)
-      }
-
-      const match = await Match.findOne({ matchId })
-      if (!match) {
-        return res.status(404).json({ error: 'Match not found' })
-      }
-
-      if (match.status === 'resolved') {
-        return res.status(400).json({ error: 'Match already resolved' })
-      }
-
-      const player1IsBot = botStrategyService.isBot(match.player1Address)
-      const player2IsBot = botStrategyService.isBot(match.player2Address)
-
-      if (player1IsBot && (player1Choice === undefined || player1Choice === null)) {
-        player1Choice = botStrategyService.decideMove(
-          match.player1Address,
-          match.player2Address,
-          match.player2Reputation
-        )
-      }
-
-      if (player2IsBot && (player2Choice === undefined || player2Choice === null)) {
-        player2Choice = botStrategyService.decideMove(
-          match.player2Address,
-          match.player1Address,
-          match.player1Reputation
-        )
-      }
-
-      if (![0, 1, 2].includes(player1Choice) || ![0, 1, 2].includes(player2Choice)) {
-        return res.status(400).json({ error: 'Invalid choice values (0-2 required)' })
-      }
-
-      const outcome = resolveMatch(player1Choice, player2Choice)
-      const winner = determineWinner(outcome.player1Tokens, outcome.player2Tokens)
-
-      match.player1Choice = player1Choice
-      match.player2Choice = player2Choice
-      match.player1TokensEarned = outcome.player1Tokens
-      match.player2TokensEarned = outcome.player2Tokens
-      match.player1ReputationChange = outcome.player1RepChange
-      match.player2ReputationChange = outcome.player2RepChange
-      match.winner = winner
-      match.status = 'resolved'
-      match.resolvedAt = new Date()
-      match.description = outcome.description
-
-      await match.save()
+      const match = await resolveMatchFromChainByMatchId(matchId)
       matchDoc = match
 
-      await Promise.all([
-        Player.findOneAndUpdate(
-          { walletAddress: match.player1Address },
-          {
-            $inc: {
-              tokensAvailable: outcome.player1Tokens,
-              reputation: outcome.player1RepChange,
-              matchesPlayed: 1,
-              matchesWon: winner === 'player1' ? 1 : 0,
-            },
-          },
-          { new: true }
-        ),
-        Player.findOneAndUpdate(
-          { walletAddress: match.player2Address },
-          {
-            $inc: {
-              tokensAvailable: outcome.player2Tokens,
-              reputation: outcome.player2RepChange,
-              matchesPlayed: 1,
-              matchesWon: winner === 'player2' ? 1 : 0,
-            },
-          },
-          { new: true }
-        ),
-      ])
+      const onChainPlayer1Choice = typeof match.player1Choice === 'number' ? match.player1Choice : 2
+      const onChainPlayer2Choice = typeof match.player2Choice === 'number' ? match.player2Choice : 2
 
       res.json({
         matchId: match.matchId,
         player1: {
-          choice: getChoiceDescription(player1Choice),
-          tokensEarned: outcome.player1Tokens,
-          reputationChange: outcome.player1RepChange,
+          choice: getChoiceDescription(onChainPlayer1Choice),
+          tokensEarned: match.player1TokensEarned,
+          reputationChange: match.player1ReputationChange,
         },
         player2: {
-          choice: getChoiceDescription(player2Choice),
-          tokensEarned: outcome.player2Tokens,
-          reputationChange: outcome.player2RepChange,
+          choice: getChoiceDescription(onChainPlayer2Choice),
+          tokensEarned: match.player2TokensEarned,
+          reputationChange: match.player2ReputationChange,
         },
-        winner,
-        description: outcome.description,
+        winner: match.winner,
+        description: match.description,
       })
-
-      if (player1IsBot) {
-        botStrategyService.recordChoice(match.player1Address, match.player2Address, player1Choice)
-        botStrategyService.recordOutcome(match.player1Address, winner === 'player1')
-      }
-
-      if (player2IsBot) {
-        botStrategyService.recordChoice(match.player2Address, match.player1Address, player2Choice)
-        botStrategyService.recordOutcome(match.player2Address, winner === 'player2')
-      }
-
-      if (player1IsBot || player2IsBot) {
-        botStrategyService.adjustStrategyWeights()
-      }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error resolving match:', error)
-      res.status(500).json({ error: 'Failed to resolve match' })
-      return
+
+      const message = error?.message || 'Failed to resolve match'
+
+      if (message === 'Match not found') {
+        return res.status(404).json({ error: message })
+      }
+
+      if (
+        message === 'Match must be resolved on-chain; onChainMatchId is missing' ||
+        message === 'On-chain match is not yet resolved'
+      ) {
+        return res.status(400).json({ error: message })
+      }
+
+      if (message === 'Failed to read on-chain match state') {
+        return res.status(500).json({ error: message })
+      }
+
+      return res.status(500).json({ error: 'Failed to resolve match' })
     }
     if (!matchDoc) {
       return
@@ -304,6 +223,18 @@ export function createMatchesRoutes(deps: MatchesRouteDependencies) {
 
         onTournamentUpdated?.(seededTournament)
         await onRoundSeeded?.(seededTournament, roundNumber, matches)
+
+        // Once the next round is seeded, automatically simulate any purely bot-only
+        // rounds so the tournament can fully resolve even without human players.
+        try {
+          const autoPlayedTournament = await tournamentManager.autoPlayBotOnlyRounds(
+            matchDoc.tournamentId,
+            roundNumber
+          )
+          onTournamentUpdated?.(autoPlayedTournament)
+        } catch (autoErr) {
+          console.error('Error auto-playing bot-only rounds:', autoErr)
+        }
       }
     } catch (err) {
       console.error('Error updating tournament bracket:', err)

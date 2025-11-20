@@ -12,6 +12,7 @@
     "format": "prettier --write \"src/**/*.{ts,tsx,json,css}\""
   },
   "dependencies": {
+    "@noble/hashes": "^2.0.1",
     "@onelabs/sui": "^1.26.2",
     "@reduxjs/toolkit": "^1.9.7",
     "axios": "^1.6.2",

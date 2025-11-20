@@ -89,8 +89,8 @@ export const useBlockchainActions = () => {
     return buildAndExecuteTx(tx, 'Commit choice')
   }, [])
 
-  const revealChoice = useCallback(async (matchId: string, choice: 0 | 1 | 2, salt: bigint) => {
-    const tx = createRevealChoiceTx(matchId, choice, salt)
+  const revealChoice = useCallback(async (matchId: string, choice: 0 | 1 | 2, salt: Uint8Array) => {
+    const tx = createRevealChoiceTx(matchId, choice, Array.from(salt))
     return buildAndExecuteTx(tx, 'Reveal choice')
   }, [])
 

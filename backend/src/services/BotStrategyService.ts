@@ -1,4 +1,5 @@
-import { BotFactory, QueueParticipant } from './MatchmakingQueue'
+import crypto from 'crypto'
+import type { QueueParticipant } from './MatchmakingQueue'
 import { BotStrategy } from '../types/participants'
 
 type BotMemory = {
@@ -14,6 +15,88 @@ const DEFAULT_WEIGHTS: Record<BotStrategy, number> = {
   titfortat: 0.15,
   reputation: 0.15,
   adaptive: 0.1,
+}
+
+const BOT_CONTROLLER_ADDRESS = process.env.BOT_CONTROLLER_ADDRESS
+
+interface BotArchetype {
+  strategy: BotStrategy
+  weight: number
+  baseReputation: number
+}
+
+const BOT_ARCHETYPES: BotArchetype[] = [
+  { strategy: 'cooperator', weight: 0.6, baseReputation: 1150 },
+  { strategy: 'betrayer', weight: 0.3, baseReputation: 1050 },
+  { strategy: 'random', weight: 0.1, baseReputation: 1000 },
+]
+
+const BOT_NAMES = [
+  'Aurora',
+  'Cipher',
+  'Nebula',
+  'Quanta',
+  'Vesper',
+  'Onyx',
+  'Kairo',
+  'Nyx',
+  'Riven',
+  'Solace',
+]
+
+const randomInRange = (min: number, max: number) =>
+  Math.floor(Math.random() * (max - min + 1)) + min
+
+const pickRandom = <T>(items: T[]): T => items[Math.floor(Math.random() * items.length)]
+
+class BotFactory {
+  private memory = new Map<string, { history: string[] }>()
+
+  createBot(preferredStrategy?: BotStrategy): QueueParticipant {
+    const strategy = preferredStrategy ?? this.rollStrategy()
+    const id = `bot_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+    const username = `${pickRandom(BOT_NAMES)}-${randomInRange(100, 999)}`
+    const address =
+      BOT_CONTROLLER_ADDRESS && BOT_CONTROLLER_ADDRESS.length > 0
+        ? BOT_CONTROLLER_ADDRESS
+        : `0x${crypto.randomBytes(16).toString('hex')}`
+    const decisionDelayMs = randomInRange(1200, 3500)
+
+    const bot: QueueParticipant = {
+      id,
+      address,
+      username,
+      reputation: this.baseReputation(strategy),
+      isBot: true,
+      strategy,
+      decisionDelayMs,
+    }
+
+    this.memory.set(id, { history: [] })
+    return bot
+  }
+
+  getMemory(botId: string) {
+    return this.memory.get(botId)
+  }
+
+  private rollStrategy(): BotStrategy {
+    const roll = Math.random()
+    let cumulative = 0
+
+    for (const archetype of BOT_ARCHETYPES) {
+      cumulative += archetype.weight
+      if (roll <= cumulative) {
+        return archetype.strategy
+      }
+    }
+
+    return 'random'
+  }
+
+  private baseReputation(strategy: BotStrategy) {
+    return BOT_ARCHETYPES.find((a) => a.strategy === strategy)?.baseReputation ?? 1000
+  }
 }
 
 export class BotStrategyService {
