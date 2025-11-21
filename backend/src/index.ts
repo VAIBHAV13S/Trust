@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import express, { Express, Request, Response } from 'express'
+import express, { Express, Request, Response, NextFunction } from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
 import { Server as SocketIOServer, Socket } from 'socket.io'
@@ -381,7 +381,7 @@ function notifyPlayer(
 }
 
 // Error handling middleware
-app.use((err: any, req: Request, res: Response) => {
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   console.error(err)
   res.status(err.statusCode || 500).json({
     error: err.message || 'Internal Server Error',
