@@ -13,15 +13,6 @@ import {
 } from '../store/lobbySlice'
 import { RootState } from '../store'
 
-// Get API URL from environment or default
-const getApiUrl = () => {
-  try {
-    return (import.meta as any).env.VITE_API_URL || 'http://localhost:3000'
-  } catch {
-    return 'http://localhost:3000'
-  }
-}
-
 // Derive Socket.IO URL (origin only) from API URL
 const getSocketUrl = () => {
   try {
