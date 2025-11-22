@@ -1,8 +1,9 @@
 import { Router, Request, Response } from 'express'
 import { TournamentManager } from '../services/TournamentManager.js'
-import type { ITournament, TournamentMatch } from '../models/Tournament.js'
+import Tournament, { ITournament, TournamentMatch } from '../models/Tournament.js'
 import { authMiddleware } from '../middleware/authMiddleware.js'
 import { getActiveTournamentId } from '../state/tournamentState.js'
+import { botStrategyService } from '../services/BotStrategyService.js'
 
 interface TournamentRoutesDependencies {
   tournamentManager: TournamentManager
@@ -68,6 +69,57 @@ export function createTournamentRoutes(deps: TournamentRoutesDependencies) {
     } catch (error: any) {
       console.error('Failed to advance tournament:', error)
       res.status(500).json({ error: error.message || 'Failed to advance tournament' })
+    }
+  })
+
+  router.post('/auto-resolve-bot-only', authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const tournaments = await Tournament.find({ status: 'in_progress' })
+
+      const updatedIds: string[] = []
+
+      for (const t of tournaments) {
+        let hasHumanPending = false
+
+        for (const round of t.rounds) {
+          for (const m of round.matches) {
+            if (m.bye || m.status === 'completed') continue
+
+            const p1 = m.player1
+            const p2 = m.player2
+
+            if ((p1 && !botStrategyService.isBot(p1)) || (p2 && !botStrategyService.isBot(p2))) {
+              hasHumanPending = true
+              break
+            }
+          }
+          if (hasHumanPending) break
+        }
+
+        if (hasHumanPending) {
+          continue
+        }
+
+        const startRoundNumber = t.currentRound || 1
+        const autoPlayed = await tournamentManager.autoPlayBotOnlyRounds(
+          String(t._id),
+          startRoundNumber
+        )
+
+        onTournamentUpdated?.(autoPlayed)
+
+        updatedIds.push(autoPlayed.id)
+      }
+
+      res.json({
+        updatedCount: updatedIds.length,
+        updatedTournamentIds: updatedIds,
+      })
+    } catch (error: any) {
+      console.error('Auto-resolve bot-only tournaments error:', error)
+      res.status(500).json({
+        error: error.message || 'Failed to auto-resolve bot-only tournaments',
+      })
     }
   })
 
