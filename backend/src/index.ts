@@ -129,6 +129,12 @@ io.on('connection', (socket: Socket) => {
 
   // Join lobby event
   socket.on('player-join', (data) => {
+    console.log('player-join event received', {
+      socketId: socket.id,
+      address: data?.address,
+      username: data?.username,
+      reputation: data?.reputation,
+    })
     const activeTournamentId = getActiveTournamentId()
     if (activeTournamentId) {
       console.log('Lobby closed - active tournament in progress', {

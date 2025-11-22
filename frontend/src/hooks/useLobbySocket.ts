@@ -29,6 +29,11 @@ export const useLobbySocket = () => {
   const countdownInterval = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
+    console.log('useLobbySocket auth state', {
+      isConnected: auth.isConnected,
+      player: auth.player,
+    })
+
     if (!auth.isConnected || !auth.player) return
 
     // Initialize Socket.io connection
@@ -42,11 +47,13 @@ export const useLobbySocket = () => {
     socketRef.current = socket
 
     // Join lobby room
-    socket.emit('player-join', {
+    const joinPayload = {
       address: auth.player.walletAddress,
       username: auth.player.username,
       reputation: auth.player.reputation,
-    })
+    }
+    console.log('emitting player-join', joinPayload)
+    socket.emit('player-join', joinPayload)
 
     // Listen for player joined events
     socket.on('player-joined', (data: any) => {
