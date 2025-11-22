@@ -334,13 +334,23 @@ export function createMatchesRoutes(deps: MatchesRouteDependencies) {
       onTournamentUpdated?.(tournament)
 
       if (roundCompleted && advancingPlayers.length > 0) {
-        const { tournament: seededTournament, roundNumber, matches } = await tournamentManager.seedNextRound(
+        const { tournament: seededTournament, roundNumber } = await tournamentManager.seedNextRound(
           matchDoc.tournamentId,
           advancingPlayers
         )
 
         onTournamentUpdated?.(seededTournament)
-        await onRoundSeeded?.(seededTournament, roundNumber, matches)
+
+        // Assign match IDs for the newly seeded round so we can notify participants
+        const seededWithIds = await tournamentManager.assignMatchIds(
+          String(seededTournament._id ?? seededTournament.id),
+          roundNumber
+        )
+
+        const nextRound = seededWithIds.rounds.find((r) => r.roundNumber === roundNumber)
+        const matchesWithIds = nextRound ? nextRound.matches : []
+
+        await onRoundSeeded?.(seededWithIds, roundNumber, matchesWithIds)
 
         // Once the next round is seeded, automatically simulate any purely bot-only
         // rounds so the tournament can fully resolve even without human players.
