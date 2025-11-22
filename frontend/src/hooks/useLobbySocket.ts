@@ -22,6 +22,20 @@ const getApiUrl = () => {
   }
 }
 
+// Derive Socket.IO URL (origin only) from API URL
+const getSocketUrl = () => {
+  try {
+    const raw = (import.meta as any).env.VITE_API_URL
+    if (raw) {
+      const url = new URL(raw)
+      return url.origin
+    }
+    return 'http://localhost:3000'
+  } catch {
+    return 'http://localhost:3000'
+  }
+}
+
 export const useLobbySocket = () => {
   const dispatch = useDispatch()
   const socketRef = useRef<Socket | null>(null)
@@ -37,11 +51,20 @@ export const useLobbySocket = () => {
     if (!auth.isConnected || !auth.player) return
 
     // Initialize Socket.io connection
-    const socket = io(getApiUrl(), {
+    const socket = io(getSocketUrl(), {
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       reconnectionAttempts: 5,
+      transports: ['polling'],
+    })
+
+    socket.on('connect', () => {
+      console.log('Socket.IO connected', socket.id)
+    })
+
+    socket.on('connect_error', (err) => {
+      console.log('Socket.IO connect_error', err.message)
     })
 
     socketRef.current = socket

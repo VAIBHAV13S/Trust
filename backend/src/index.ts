@@ -79,6 +79,10 @@ const tournamentManager = new TournamentManager(DEFAULT_MATCH_STAKE)
 
 
 // Middleware
+app.use((req: Request, res: Response, next: NextFunction) => {
+  console.log('HTTP', req.method, req.url)
+  next()
+})
 app.use(helmet())
 app.use(cors())
 app.use(express.json())
