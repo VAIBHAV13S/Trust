@@ -2,6 +2,7 @@
 // Wraps Move contract entry functions for the Trust Game
  
 import { Transaction } from '@onelabs/sui/transactions';
+import { Buffer } from 'buffer';
 import { oneChainClient } from './onechain-client';
 import { ONE_CHAIN_CONFIG } from '@/config/onechain';
 
