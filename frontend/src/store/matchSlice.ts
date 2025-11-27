@@ -8,11 +8,15 @@ interface Opponent {
 
 export interface MatchResult {
   player1: {
+    address?: string
+    username?: string
     choice: string
     tokensEarned: number
     reputationChange: number
   }
   player2: {
+    address?: string
+    username?: string
     choice: string
     tokensEarned: number
     reputationChange: number
