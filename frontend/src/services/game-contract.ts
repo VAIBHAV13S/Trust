@@ -6,9 +6,18 @@ import { Buffer } from 'buffer';
 import { oneChainClient } from './onechain-client';
 import { ONE_CHAIN_CONFIG } from '@/config/onechain';
 
+const applyDefaults = (tx: Transaction) => {
+  const gasBudget = Number(ONE_CHAIN_CONFIG.gasBudget || 0);
+  if (gasBudget > 0) {
+    tx.setGasBudget(gasBudget);
+  }
+  return tx;
+};
+
 const PKG_ID = ONE_CHAIN_CONFIG.packageId;
 const MODULE = ONE_CHAIN_CONFIG.module;
 const GAME_STATE_ID = ONE_CHAIN_CONFIG.gameStateId || '0x6';
+const CLOCK_OBJECT_ID = ONE_CHAIN_CONFIG.clockObjectId || '0x6';
 
 /**
  * Register a new player in the game
@@ -24,7 +33,7 @@ export const createRegisterPlayerTx = (): Transaction => {
     ],
   });
   
-  return tx;
+  return applyDefaults(tx);
 };
 
 /**
@@ -46,7 +55,7 @@ export const createStakeTokensTx = (
     ],
   });
   
-  return tx;
+  return applyDefaults(tx);
 };
 
 /**
@@ -70,7 +79,7 @@ export const createMatchTx = (
     ],
   });
   
-  return tx;
+  return applyDefaults(tx);
 };
 
 /**
@@ -91,12 +100,14 @@ export const createCommitChoiceTx = (
   tx.moveCall({
     target: `${PKG_ID}::${MODULE}::commit_choice`,
     arguments: [
+      tx.object(GAME_STATE_ID),
       tx.object(matchId),
       tx.pure.vector('u8', hashBytes),
+      tx.object(CLOCK_OBJECT_ID),
     ],
   });
   
-  return tx;
+  return applyDefaults(tx);
 };
 
 /**
@@ -116,13 +127,15 @@ export const createRevealChoiceTx = (
   tx.moveCall({
     target: `${PKG_ID}::${MODULE}::reveal_choice`,
     arguments: [
+      tx.object(GAME_STATE_ID),
       tx.object(matchId),
       tx.pure.u8(choice),
       tx.pure.vector('u8', saltBytes),
+      tx.object(CLOCK_OBJECT_ID),
     ],
   });
   
-  return tx;
+  return applyDefaults(tx);
 };
 
 /**

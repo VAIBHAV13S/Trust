@@ -11,6 +11,38 @@ import { oneChainClient, waitForTransaction, isTransactionSuccessful } from '@/s
 import { resolveProvider } from '@/utils/web3'
 import { notifyTxStatus } from '@/services/transaction-notifications'
 
+const extractErrorMessage = (error: unknown, fallback: string) => {
+  if (!error) return fallback
+
+  if (typeof error === 'string') {
+    return error
+  }
+
+  if (error instanceof Error) {
+    return error.message || fallback
+  }
+
+  if (typeof error === 'object') {
+    const maybeMessage =
+      (error as any)?.message ||
+      (error as any)?.data?.message ||
+      (error as any)?.details?.error ||
+      (error as any)?.statusMessage
+
+    if (typeof maybeMessage === 'string' && maybeMessage.trim().length > 0) {
+      return maybeMessage
+    }
+
+    try {
+      return JSON.stringify(error)
+    } catch {
+      return fallback
+    }
+  }
+
+  return fallback
+}
+
 const buildAndExecuteTx = async (tx: Transaction, description: string) => {
   const provider = resolveProvider()
   if (!provider?.signAndExecuteTransactionBlock) {
@@ -24,7 +56,9 @@ const buildAndExecuteTx = async (tx: Transaction, description: string) => {
     const sender = localStorage.getItem('walletAddress')
     console.log('🔎 Using sender for tx:', sender)
     const balance = await oneChainClient.getBalance({ owner: sender! })
-    console.log('🔎 On-chain gas balance (SUI/OCT) for sender:', balance)
+    const balanceDisplay =
+      typeof balance === 'object' ? JSON.stringify(balance, null, 2) : String(balance ?? 'unknown')
+    console.log('🔎 On-chain gas balance (SUI/OCT) for sender:', balanceDisplay)
     if (!sender) {
       throw new Error('Missing wallet address for transaction sender. Please reconnect your wallet.')
     }
@@ -53,9 +87,10 @@ const buildAndExecuteTx = async (tx: Transaction, description: string) => {
 
     return response
   } catch (error) {
+    const friendly = extractErrorMessage(error, `${description} failed`)
     console.error(`${description} failed:`, error)
-    notifyTxStatus('error', `${description} failed`)
-    throw error
+    notifyTxStatus('error', friendly)
+    throw new Error(friendly)
   }
 }
 

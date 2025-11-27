@@ -1,10 +1,13 @@
 // OneChain Configuration
 // Sets up RPC endpoint, contract address, and network parameters
 
+export const SUI_CLOCK_OBJECT_ID = '0x6'
+
 export const ONE_CHAIN_CONFIG = {
   // Contract Details
   packageId: import.meta.env.VITE_ONECHAIN_PACKAGE_ID || '0x0',
   module: 'game_manager',
+  clockObjectId: SUI_CLOCK_OBJECT_ID,
   gameStateId: import.meta.env.VITE_ONECHAIN_GAME_STATE_ID || '0x6',
   matchmakingQueueId: import.meta.env.VITE_ONECHAIN_QUEUE_ID || null,
   

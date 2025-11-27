@@ -69,7 +69,10 @@ const lobbyPlayers = new Map<string, LobbyPlayer>()
 const addressToSocket = new Map<string, string>()
 let countdownActive = false
 let countdownSeconds = 0
-const COUNTDOWN_DURATION = 30 // seconds
+let countdownIntervalRef: NodeJS.Timeout | null = null
+const READY_COUNTDOWN_DURATION = 30 // seconds when everyone is ready
+const POPULATION_COUNTDOWN_DURATION = 60 // seconds when lobby is sufficiently full
+const AUTO_COUNTDOWN_PLAYER_THRESHOLD = 10
 const MIN_PLAYERS_TO_START = 1 // Start gathering timer as soon as the first player joins
 const MAX_LOBBY_PLAYERS = 50
 const DEFAULT_MATCH_STAKE = Number(process.env.DEFAULT_MATCH_STAKE || 100)
@@ -180,6 +183,8 @@ io.on('connection', (socket: Socket) => {
       username: data.username,
       reputation: data.reputation,
     })
+
+    checkAndStartCountdown()
   })
 
   // Player ready event
@@ -242,12 +247,14 @@ function broadcastPlayersList() {
 }
 
 function checkAndStartCountdown() {
-  if (countdownActive || lobbyPlayers.size < MIN_PLAYERS_TO_START) {
+  if (lobbyPlayers.size < AUTO_COUNTDOWN_PLAYER_THRESHOLD) {
     return
   }
 
-  console.log(`Starting countdown: ${lobbyPlayers.size} players connected`)
-  startCountdown()
+  console.log(
+    `Starting population-based countdown: ${lobbyPlayers.size}/${MAX_LOBBY_PLAYERS} players connected`
+  )
+  requestCountdown(POPULATION_COUNTDOWN_DURATION)
 }
 
 function checkIfAllReady() {
@@ -255,36 +262,61 @@ function checkIfAllReady() {
 
   const allReady = Array.from(lobbyPlayers.values()).every((p) => p.isReady)
 
-  if (allReady && lobbyPlayers.size >= MIN_PLAYERS_TO_START && !countdownActive) {
-    console.log(`All players ready (${lobbyPlayers.size}). Starting countdown...`)
-    startCountdown()
+  if (allReady && lobbyPlayers.size >= MIN_PLAYERS_TO_START) {
+    console.log(`All players ready (${lobbyPlayers.size}). Starting ready-check countdown...`)
+    requestCountdown(READY_COUNTDOWN_DURATION)
   }
 }
 
-function startCountdown() {
-  if (countdownActive) return
+function requestCountdown(durationSeconds: number) {
+  if (countdownActive) {
+    if (countdownSeconds <= durationSeconds) {
+      return
+    }
 
+    stopCountdown({ suppressEvent: true })
+  }
+
+  startCountdown(durationSeconds)
+}
+
+function startCountdown(durationSeconds: number) {
   countdownActive = true
-  countdownSeconds = COUNTDOWN_DURATION
+  countdownSeconds = durationSeconds
 
   io.emit('countdown-start', { secondsRemaining: countdownSeconds })
 
-  const countdownInterval = setInterval(() => {
+  if (countdownIntervalRef) {
+    clearInterval(countdownIntervalRef)
+  }
+
+  countdownIntervalRef = setInterval(() => {
     countdownSeconds--
 
     io.emit('countdown-tick', { secondsRemaining: countdownSeconds })
 
     if (countdownSeconds <= 0) {
-      clearInterval(countdownInterval)
+      stopCountdown()
       startMatches()
     }
   }, 1000)
 }
 
-function stopCountdown() {
+function stopCountdown(options: { suppressEvent?: boolean } = {}) {
+  const { suppressEvent = false } = options
+
+  if (countdownIntervalRef) {
+    clearInterval(countdownIntervalRef)
+    countdownIntervalRef = null
+  }
+
+  const wasRunning = countdownActive || countdownSeconds > 0
   countdownActive = false
   countdownSeconds = 0
-  io.emit('countdown-complete')
+
+  if (wasRunning && !suppressEvent) {
+    io.emit('countdown-complete')
+  }
 }
 
 async function startMatches() {
@@ -319,7 +351,6 @@ async function startMatches() {
   }
 
   lobbyPlayers.clear()
-  addressToSocket.clear()
   matchmakingQueue.clear()
   countdownActive = false
   countdownSeconds = 0

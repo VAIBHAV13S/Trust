@@ -32,16 +32,10 @@ export const useLobbySocket = () => {
   const socketRef = useRef<Socket | null>(null)
   const auth = useSelector((state: RootState) => state.auth)
   const countdownInterval = useRef<NodeJS.Timeout | null>(null)
+  const joinedWalletRef = useRef<string | null>(null)
 
   useEffect(() => {
-    console.log('useLobbySocket auth state', {
-      isConnected: auth.isConnected,
-      player: auth.player,
-    })
-
-    if (!auth.isConnected || !auth.player) return
-
-    // Initialize Socket.io connection
+    // Initialize Socket.io connection once
     const socket = io(getSocketUrl(), {
       reconnection: true,
       reconnectionDelay: 1000,
@@ -59,15 +53,6 @@ export const useLobbySocket = () => {
     })
 
     socketRef.current = socket
-
-    // Join lobby room
-    const joinPayload = {
-      address: auth.player.walletAddress,
-      username: auth.player.username,
-      reputation: auth.player.reputation,
-    }
-    console.log('emitting player-join', joinPayload)
-    socket.emit('player-join', joinPayload)
 
     // Listen for player joined events
     socket.on('player-joined', (data: any) => {
@@ -181,8 +166,42 @@ export const useLobbySocket = () => {
       socket.off('tournament-updated', broadcastTournamentUpdated)
       socket.off('tournament-round-seeded', broadcastRoundSeeded)
       socket.disconnect()
+      socketRef.current = null
+      joinedWalletRef.current = null
     }
-  }, [auth.isConnected, auth.player, dispatch])
+  }, [dispatch])
+
+  const walletAddress = auth.player?.walletAddress?.toLowerCase()
+
+  useEffect(() => {
+    console.log('useLobbySocket auth state', {
+      isConnected: auth.isConnected,
+      player: auth.player,
+    })
+
+    if (!auth.isConnected || !auth.player || !walletAddress) {
+      return
+    }
+
+    const socket = socketRef.current
+    if (!socket) {
+      return
+    }
+
+    if (joinedWalletRef.current === walletAddress) {
+      return
+    }
+
+    joinedWalletRef.current = walletAddress
+
+    const joinPayload = {
+      address: auth.player.walletAddress,
+      username: auth.player.username,
+      reputation: auth.player.reputation,
+    }
+    console.log('emitting player-join', joinPayload)
+    socket.emit('player-join', joinPayload)
+  }, [auth.isConnected, auth.player?.walletAddress, auth.player?.username, auth.player?.reputation, walletAddress])
 
   const setReady = (isReady: boolean) => {
     if (socketRef.current && auth.player) {

@@ -271,11 +271,15 @@ export function createMatchesRoutes(deps: MatchesRouteDependencies) {
       res.json({
         matchId: matchDoc.matchId,
         player1: {
+          address: matchDoc.player1Address,
+          username: matchDoc.player1Username,
           choice: getChoiceDescription(p1Choice as Choice),
           tokensEarned: matchDoc.player1TokensEarned,
           reputationChange: matchDoc.player1ReputationChange,
         },
         player2: {
+          address: matchDoc.player2Address,
+          username: matchDoc.player2Username,
           choice: getChoiceDescription(p2Choice as Choice),
           tokensEarned: matchDoc.player2TokensEarned,
           reputationChange: matchDoc.player2ReputationChange,

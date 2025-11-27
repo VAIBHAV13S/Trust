@@ -10,6 +10,25 @@ import { useOnChainData } from '@/hooks/useOnChainData'
 import { generateSalt, computeCommitment, bytesToHex } from '@/utils/gameCrypto'
 
 type Choice = 'COOPERATE' | 'BETRAY' | 'ABSTAIN' | null
+type StepStatus = 'done' | 'active' | 'pending'
+
+const STEP_LABELS: Record<StepStatus, string> = {
+  done: 'Completed',
+  active: 'In Progress',
+  pending: 'Waiting',
+}
+
+const STEP_CARD_CLASSES: Record<StepStatus, string> = {
+  done: 'border-green-500/60 bg-green-500/5 shadow-lg shadow-green-500/10',
+  active: 'border-purple-500/60 bg-purple-500/5 shadow-lg shadow-purple-500/10',
+  pending: 'border-slate-700 bg-slate-900/40 opacity-80',
+}
+
+const STEP_CHIP_CLASSES: Record<StepStatus, string> = {
+  done: 'bg-green-500/20 text-green-300 border border-green-500/40',
+  active: 'bg-purple-500/20 text-purple-200 border border-purple-500/40',
+  pending: 'bg-slate-700/50 text-slate-300 border border-slate-600',
+}
 
 interface MatchData {
   matchId: string
@@ -49,6 +68,10 @@ export const Match: React.FC = () => {
   const [onChainMatchId, setOnChainMatchId] = useState<string | null>(null)
   const [onChainAvailable, setOnChainAvailable] = useState(true)
   const [commitSalt, setCommitSalt] = useState<Uint8Array | null>(null)
+  const [hasRevealedOnChain, setHasRevealedOnChain] = useState(false)
+  const [isStakingOnChain, setIsStakingOnChain] = useState(false)
+  const [isCommittingOnChain, setIsCommittingOnChain] = useState(false)
+  const [isRevealingOnChain, setIsRevealingOnChain] = useState(false)
 
   const choiceToCode = (choice: Choice): 0 | 1 | 2 => {
     switch (choice) {
@@ -120,6 +143,10 @@ export const Match: React.FC = () => {
     setChoiceHash('')
     setRevealSalt('')
     setCommitSalt(null)
+    setHasRevealedOnChain(false)
+    setIsStakingOnChain(false)
+    setIsCommittingOnChain(false)
+    setIsRevealingOnChain(false)
   }, [matchId])
 
   // Ensure there is an on-chain Match object id we can use for staking/commit/reveal
@@ -160,6 +187,7 @@ export const Match: React.FC = () => {
   const handleStakeTokens = async () => {
     if (!matchId) return
     try {
+      setIsStakingOnChain(true)
       const onChainId = await ensureOnChainMatchId()
 
       if (!onChainId) {
@@ -174,6 +202,8 @@ export const Match: React.FC = () => {
     } catch (err) {
       console.error('Stake tokens failed:', err)
       setError('Failed to stake tokens on-chain')
+    } finally {
+      setIsStakingOnChain(false)
     }
   }
 
@@ -184,6 +214,7 @@ export const Match: React.FC = () => {
       return
     }
     try {
+      setIsCommittingOnChain(true)
       const onChainId = await ensureOnChainMatchId()
       if (!onChainId) return
       const salt = generateSalt()
@@ -199,7 +230,10 @@ export const Match: React.FC = () => {
       setError(null)
     } catch (err) {
       console.error('Commit failed:', err)
-      setError('Failed to commit choice on-chain')
+      const friendly = err instanceof Error ? err.message : 'Failed to commit choice on-chain'
+      setError(friendly)
+    } finally {
+      setIsCommittingOnChain(false)
     }
   }
 
@@ -213,6 +247,7 @@ export const Match: React.FC = () => {
       return
     }
     try {
+      setIsRevealingOnChain(true)
       const onChainId = await ensureOnChainMatchId()
       if (!onChainId) return
       await revealChoice(
@@ -220,9 +255,13 @@ export const Match: React.FC = () => {
         selectedChoice === 'COOPERATE' ? 0 : selectedChoice === 'BETRAY' ? 1 : 2,
         commitSalt
       )
+      setHasRevealedOnChain(true)
+      setError(null)
     } catch (err) {
       console.error('Reveal failed:', err)
       setError('Failed to reveal choice on-chain')
+    } finally {
+      setIsRevealingOnChain(false)
     }
   }
 
@@ -296,6 +335,32 @@ export const Match: React.FC = () => {
   const handleContinue = () => {
     navigate('/lobby')
   }
+
+  const { stakeStatus, commitStatus, revealStatus, syncStatus } = useMemo(() => {
+    let firstOpenAssigned = false
+    const resolveStatus = (completed: boolean): StepStatus => {
+      if (completed) return 'done'
+      if (!firstOpenAssigned) {
+        firstOpenAssigned = true
+        return 'active'
+      }
+      return 'pending'
+    }
+
+    const stake = resolveStatus(hasStakedOnChain)
+    const commit = resolveStatus(Boolean(choiceHash))
+    const reveal = resolveStatus(hasRevealedOnChain)
+    const sync = resolveStatus(Boolean(localResult))
+
+    return {
+      stakeStatus: stake,
+      commitStatus: commit,
+      revealStatus: reveal,
+      syncStatus: sync,
+    }
+  }, [hasStakedOnChain, choiceHash, hasRevealedOnChain, localResult])
+
+  const canRevealOnChain = Boolean(choiceHash && commitSalt && hasStakedOnChain)
 
   const matchEvents = useMemo(() => {
     if (!onChainData.events?.length) {
@@ -435,10 +500,10 @@ export const Match: React.FC = () => {
         <div className="bg-gradient-to-r from-purple-900/20 to-pink-900/20 rounded-lg border border-purple-500/20 p-8">
           <p className="text-center text-slate-300 mb-6 text-sm uppercase tracking-wider">
             {isSubmitted
-              ? 'Choice submitted! Waiting for opponent...'
+              ? 'Choice locked! Follow the flow cards to finish on-chain steps.'
               : hasStakedOnChain
-              ? 'Choose your action'
-              : 'Stake tokens on-chain before choosing your action'}
+              ? 'Choose your action – this locks your move locally.'
+              : 'Complete Step 1 (Stake) to unlock your actions.'}
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -509,14 +574,121 @@ export const Match: React.FC = () => {
           </p>
         </div>
 
-        <div className="mt-4 flex justify-center">
-          <button
-            onClick={handleResolveFromChain}
-            disabled={isSubmitting || !matchId}
-            className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50"
-          >
-            {isSubmitting ? 'Resolving from chain...' : 'Sync Result From Chain'}
-          </button>
+        {/* Match flow guidance */}
+        <div className="mt-10 bg-slate-900/70 border border-slate-800 rounded-2xl p-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">On-chain flow</p>
+              <h2 className="text-xl font-semibold text-white">Finish your match in four easy steps</h2>
+            </div>
+            <p className="text-sm text-slate-400">
+              Each card tracks your progress. Complete them in order to finalize rewards on-chain.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className={`${STEP_CARD_CLASSES[stakeStatus]} rounded-xl p-5 transition-all duration-200`}>
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-widest text-slate-400">Step 1</p>
+                  <h3 className="text-lg font-semibold text-white mt-1">Stake tokens</h3>
+                </div>
+                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${STEP_CHIP_CLASSES[stakeStatus]}`}>
+                  {STEP_LABELS[stakeStatus]}
+                </span>
+              </div>
+              <p className="text-sm text-slate-300 mt-2 mb-4">
+                Lock your wager on-chain to unlock decision buttons.
+              </p>
+              <label className="block text-xs text-slate-400 mb-2">Stake Amount (MIST)</label>
+              <input
+                type="number"
+                min="1"
+                value={stakeAmount}
+                onChange={(e) => setStakeAmount(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 mb-3"
+              />
+              <button
+                onClick={handleStakeTokens}
+                disabled={!matchId || isStakingOnChain}
+                className="w-full py-2 rounded-lg bg-pink-600 hover:bg-pink-700 disabled:opacity-50"
+              >
+                {isStakingOnChain ? 'Staking...' : 'Stake Tokens On-chain'}
+              </button>
+            </div>
+
+            <div className={`${STEP_CARD_CLASSES[commitStatus]} rounded-xl p-5 transition-all duration-200`}>
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-widest text-slate-400">Step 2</p>
+                  <h3 className="text-lg font-semibold text-white mt-1">Commit your choice</h3>
+                </div>
+                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${STEP_CHIP_CLASSES[commitStatus]}`}>
+                  {STEP_LABELS[commitStatus]}
+                </span>
+              </div>
+              <p className="text-sm text-slate-300 mt-2">
+                Select an action above, then seal it on-chain.
+              </p>
+              <div className="mt-4 text-xs font-mono bg-slate-900/60 border border-slate-700 rounded-md p-3 text-slate-400 break-words min-h-[60px]">
+                {choiceHash ? choiceHash : 'Your commitment hash will appear here after you confirm.'}
+              </div>
+              <button
+                onClick={handleCommitOnChain}
+                disabled={!matchId || !hasStakedOnChain || selectedChoice === null || isCommittingOnChain}
+                className="mt-4 w-full py-2 rounded-lg bg-purple-600 hover:bg-purple-700 disabled:opacity-50"
+              >
+                {isCommittingOnChain ? 'Committing...' : selectedChoice ? 'Commit Selected Choice' : 'Select a Choice First'}
+              </button>
+            </div>
+
+            <div className={`${STEP_CARD_CLASSES[revealStatus]} rounded-xl p-5 transition-all duration-200`}>
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-widest text-slate-400">Step 3</p>
+                  <h3 className="text-lg font-semibold text-white mt-1">Reveal choice</h3>
+                </div>
+                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${STEP_CHIP_CLASSES[revealStatus]}`}>
+                  {STEP_LABELS[revealStatus]}
+                </span>
+              </div>
+              <p className="text-sm text-slate-300 mt-2">
+                When both players are ready, open your commitment with the salt below.
+              </p>
+              <div className="mt-4 text-xs font-mono bg-slate-900/60 border border-slate-700 rounded-md p-3 text-slate-400 break-words min-h-[60px]">
+                {revealSalt ? revealSalt : 'Salt auto-generates when you commit and is required to reveal.'}
+              </div>
+              <button
+                onClick={handleRevealOnChain}
+                disabled={!matchId || !canRevealOnChain || isRevealingOnChain}
+                className="mt-4 w-full py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+              >
+                {isRevealingOnChain ? 'Revealing...' : 'Reveal On-chain'}
+              </button>
+            </div>
+
+            <div className={`${STEP_CARD_CLASSES[syncStatus]} rounded-xl p-5 transition-all duration-200`}>
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-widest text-slate-400">Step 4</p>
+                  <h3 className="text-lg font-semibold text-white mt-1">Sync results</h3>
+                </div>
+                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${STEP_CHIP_CLASSES[syncStatus]}`}>
+                  {STEP_LABELS[syncStatus]}
+                </span>
+              </div>
+              <p className="text-sm text-slate-300 mt-2">
+                Pull the resolved outcome from the backend once both sides have revealed.
+              </p>
+              <button
+                onClick={handleResolveFromChain}
+                disabled={isSubmitting || !matchId}
+                className="mt-4 w-full py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {isSubmitting ? 'Syncing with chain...' : 'Sync Result From Chain'}
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* On-chain summary */}
