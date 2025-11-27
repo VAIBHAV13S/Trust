@@ -348,6 +348,21 @@ async function startMatches() {
 
   if (firstRound) {
     await broadcastRoundSeeded(seededTournament, 1, firstRound.matches)
+
+    const allBots = firstRound.matches.every((match) => {
+      if (match.bye) return true
+      const p1Bot = match.player1 ? botStrategyService.isBot(match.player1) : false
+      const p2Bot = match.player2 ? botStrategyService.isBot(match.player2) : false
+      return p1Bot && p2Bot
+    })
+
+    if (allBots) {
+      try {
+        await tournamentManager.autoPlayBotOnlyRounds(tournamentId, 1)
+      } catch (err) {
+        console.error('Failed to auto-play bot-only tournament', err)
+      }
+    }
   }
 
   lobbyPlayers.clear()
